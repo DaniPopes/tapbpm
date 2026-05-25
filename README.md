@@ -2,6 +2,12 @@
 
 A single-button BPM tap app built with Tauri. Tap the button repeatedly; the app averages the latest taps and shows the current BPM inside the same button. A pause longer than 3 seconds starts a new measurement.
 
+## Inputs
+
+- Click or tap the button to record a beat.
+- Press `Enter` or `Space` to record a beat.
+- Press `R` or `Escape` to reset.
+
 ## Development
 
 ```sh
