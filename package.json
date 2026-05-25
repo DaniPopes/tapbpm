@@ -10,6 +10,7 @@
     "bundle:macos": "tauri build --bundles app,dmg",
     "bundle:ios": "npm run build && cap sync ios",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "ios:open": "cap open ios",
     "preview": "vite preview",
