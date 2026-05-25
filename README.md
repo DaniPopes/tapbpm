@@ -15,6 +15,9 @@ npm install
 npm run tauri dev
 ```
 
+Use Node 26 with npm 11 and the stable Rust toolchain from
+`rust-toolchain.toml`.
+
 ## Verification
 
 ```sh
