@@ -29,6 +29,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.1
 
       - run: npm ci
+      - uses: taiki-e/install-action@v2.79.7
+        with:
+          tool: nextest
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run build
