@@ -17,4 +17,8 @@ npm run bundle:macos
 npm run bundle:ios
 ```
 
-Linux builds produce `.deb` and `.rpm` packages. macOS and iOS builds must be run on macOS with the required Apple toolchain installed; initialize the iOS project once with `npx tauri ios init` before the first iOS build.
+Linux builds produce `.deb` and `.rpm` packages. macOS builds must be run on macOS with the required Apple toolchain installed.
+
+The Arch Linux package is defined in `packaging/arch/` and can be built and installed locally with `makepkg -fi` from that directory.
+
+The iOS app is generated under `ios/` with Capacitor and uses the same `dist/` web assets as the desktop app. Run `npm run ios:open` on macOS to open the project in Xcode.

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Tap BPM
+Comment=Measure BPM from taps
+Exec=tapbpm
+Icon=tapbpm
+Terminal=false
+Categories=AudioVideo;Audio;Music;

@@ -1,0 +1,35 @@
+# Maintainer: DaniPopes
+
+pkgname=tapbpm
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Single-button BPM tap app"
+arch=("x86_64")
+url="https://github.com/DaniPopes/tapbpm"
+license=("custom:unlicensed")
+depends=("gtk3" "webkit2gtk-4.1")
+makedepends=("cargo" "npm")
+
+build() {
+  local repo_root
+  repo_root="$(realpath "$startdir/../..")"
+
+  cd "$repo_root"
+  npm run build
+  cargo build --release --bins --features tauri/custom-protocol
+}
+
+package() {
+  local repo_root
+  repo_root="$(realpath "$startdir/../..")"
+
+  install -Dm755 "$repo_root/target/release/tapbpm" "$pkgdir/usr/bin/tapbpm"
+  install -Dm644 "$repo_root/packaging/arch/tapbpm.desktop" \
+    "$pkgdir/usr/share/applications/tapbpm.desktop"
+  install -Dm644 "$repo_root/src-tauri/icons/32x32.png" \
+    "$pkgdir/usr/share/icons/hicolor/32x32/apps/tapbpm.png"
+  install -Dm644 "$repo_root/src-tauri/icons/128x128.png" \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/tapbpm.png"
+  install -Dm644 "$repo_root/src-tauri/icons/128x128@2x.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/tapbpm.png"
+}
