@@ -51,6 +51,24 @@ function recordTap(now: number) {
   label.textContent = "BPM";
 }
 
-button.addEventListener("click", () => {
+function isTapKey(event: KeyboardEvent): boolean {
+  return event.key === "Enter" || event.key === " " || event.key === "Spacebar";
+}
+
+button.addEventListener("click", (event) => {
+  if (event.detail === 0) {
+    return;
+  }
+
+  recordTap(performance.now());
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!isTapKey(event) || event.repeat) {
+    return;
+  }
+
+  event.preventDefault();
+  button.focus();
   recordTap(performance.now());
 });
