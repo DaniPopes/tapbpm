@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "verify": "npm run format:check && npm run typecheck && npm run build && cargo clippy --workspace --all-targets && cargo nextest run --workspace --no-tests pass && npm run bundle:ios && npm run bundle:linux",
     "ios:open": "cap open ios",
     "preview": "vite preview",
     "tauri": "tauri"

@@ -1,12 +1,18 @@
 # Tap BPM
 
-A single-button BPM tap app built with Tauri. Tap the button repeatedly; the app averages the latest taps and shows the current BPM inside the same button. A pause longer than 2.5 seconds starts a new measurement.
+A single-button BPM tap app built with Tauri. Tap the button repeatedly; the app averages the latest taps and shows the current BPM inside the same button. A pause longer than 3 seconds starts a new measurement.
 
 ## Development
 
 ```sh
 npm install
 npm run tauri dev
+```
+
+## Verification
+
+```sh
+npm run verify
 ```
 
 ## Builds
