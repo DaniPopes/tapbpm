@@ -32,7 +32,7 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run build
-      - run: cargo cl
+      - run: cargo clippy --workspace --all-targets
       - run: cargo nextest run --workspace --no-tests pass
       - run: npm run bundle:linux
 
@@ -53,7 +53,7 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run build
-      - run: cargo cl
+      - run: cargo clippy --workspace --all-targets
       - run: npm run bundle:macos
 
   ios:
