@@ -34,6 +34,7 @@ jobs:
           tool: nextest
       - run: npm run format:check
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
       - run: cargo clippy --workspace --all-targets
       - run: cargo nextest run --workspace --no-tests pass
@@ -55,6 +56,7 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
       - run: cargo clippy --workspace --all-targets
       - run: npm run bundle:macos
@@ -71,5 +73,6 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm test
       - run: npm run bundle:ios
       - run: xcodebuild -project ios/App/App.xcodeproj -scheme App -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO build
