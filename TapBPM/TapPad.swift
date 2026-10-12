@@ -1,13 +1,20 @@
 import SwiftUI
+
+/// Full-window tap surface that reports the hardware timestamp of each touch-down, click or
+/// key press.
+///
+/// SwiftUI tap gestures fire on release and lose the event timestamp; a platform view sees every
+/// finger or key as it lands, so two-finger drumming works and timing is exact.
+struct TapPad {
+    /// Called for each tap; returns whether the tap was counted.
+    var onTap: (TimeInterval) -> Bool
+}
+
+#if os(iOS)
 import UIKit
 
-/// Full-screen tap surface that reports touch-down timestamps.
-///
-/// SwiftUI tap gestures fire on touch-up and lose the hardware timestamp; a UIView sees every
-/// finger as it lands, so two-finger drumming works and timing is exact.
-struct TapPad: UIViewRepresentable {
-    /// Called for each touch-down; returns whether the tap was counted.
-    var onTap: (TimeInterval) -> Bool
+extension TapPad: UIViewRepresentable {
+    static let prompt = "TAP ANYWHERE TO THE BEAT"
 
     func makeUIView(context: Context) -> TapPadView {
         TapPadView()
@@ -48,3 +55,43 @@ final class TapPadView: UIView {
         haptics.prepare()
     }
 }
+#else
+import AppKit
+
+extension TapPad: NSViewRepresentable {
+    static let prompt = "CLICK OR PRESS ANY KEY TO THE BEAT"
+
+    func makeNSView(context: Context) -> TapPadView {
+        TapPadView()
+    }
+
+    func updateNSView(_ view: TapPadView, context: Context) {
+        view.onTap = onTap
+    }
+}
+
+final class TapPadView: NSView {
+    var onTap: ((TimeInterval) -> Bool)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        _ = onTap?(event.timestamp)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard !event.isARepeat else { return }
+        _ = onTap?(event.timestamp)
+    }
+}
+#endif

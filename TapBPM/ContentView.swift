@@ -8,8 +8,11 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             Color(.ink).ignoresSafeArea()
+            // On macOS the pad stays below the hidden title bar so the window can still be dragged.
             TapPad { tempo.tap(at: $0) }
+            #if os(iOS)
                 .ignoresSafeArea()
+            #endif
             TimelineView(.animation(minimumInterval: 1 / 60, paused: tempo.bpm == nil && (tempo.anchor == nil || timedOut))) { _ in
                 Readout(tempo: tempo, now: ProcessInfo.processInfo.systemUptime)
             }
@@ -24,9 +27,6 @@ struct ContentView: View {
             guard (try? await Task.sleep(for: .seconds(tempo.timeout))) != nil else { return }
             timedOut = true
         }
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
-        .defersSystemGestures(on: .all)
     }
 
     private var controls: some View {
@@ -34,6 +34,7 @@ struct ContentView: View {
             ControlButton(title: "½×") { tempo.scale(by: 0.5) }
                 .disabled(!tempo.canScale(by: 0.5))
             ControlButton(title: "Reset") { tempo.reset() }
+                .keyboardShortcut(.cancelAction)
                 .disabled(tempo.anchor == nil)
             ControlButton(title: "2×") { tempo.scale(by: 2) }
                 .disabled(!tempo.canScale(by: 2))
@@ -80,7 +81,7 @@ private struct Readout: View {
     }
 
     private func status(live: Bool) -> String {
-        if tempo.anchor == nil { return "TAP ANYWHERE TO THE BEAT" }
+        if tempo.anchor == nil { return TapPad.prompt }
         if !live { return "TAP TO MEASURE AGAIN" }
         return tempo.tapCount == 1 ? "KEEP TAPPING" : "\(tempo.tapCount) TAPS"
     }
