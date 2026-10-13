@@ -23,7 +23,9 @@ actor BeatTracker {
             throw ModelMissing()
         }
         let configuration = MLModelConfiguration()
-        configuration.computeUnits = .all
+        // The model compiles for the Neural Engine, but a window takes 64 ms there against 10 ms
+        // on an M-series GPU, and the first load takes 11 s.
+        configuration.computeUnits = .cpuAndGPU
         model = try await MLModel.load(contentsOf: url, configuration: configuration)
         input = try MLMultiArray(shape: [1, NSNumber(value: Self.samples)], dataType: .float32)
         features = try MLDictionaryFeatureProvider(dictionary: ["audio": input])
