@@ -68,6 +68,26 @@ struct BeatAnalysisTests {
         #expect(BeatAnalysis.estimate(beats: [1, 1.5, 2]) == nil)
     }
 
+    private func logits(every spacing: Int) -> [Float] {
+        (0..<BeatTracker.frames).map { $0 % spacing == 0 ? 4 : -5 }
+    }
+
+    @Test func modelsMustAgree() throws {
+        let agreeing = [logits(every: 25), logits(every: 25), logits(every: 30)]
+        let estimate = try #require(BeatAnalysis.estimate(logits: agreeing, filled: BeatTracker.samples, end: 0))
+        #expect(abs(estimate.fit.bpm - 120) < 0.5)
+        let disagreeing = [logits(every: 25), logits(every: 30), logits(every: 36)]
+        #expect(BeatAnalysis.estimate(logits: disagreeing, filled: BeatTracker.samples, end: 0) == nil)
+    }
+
+    @Test func confirmationNeedsAnEarlierAgreeingEstimate() {
+        var confirmation = BeatListener.Confirmation()
+        let results = [(120.0, 0.0), (120.5, 0.5), (121, 1), (150, 2), (150, 3), (150, 6)].map {
+            confirmation.confirm($0.0, at: $0.1)
+        }
+        #expect(results == [false, false, true, false, true, false])
+    }
+
     @Test func tempoFollowsRecentChange() throws {
         let old = (0..<12).map { 100 + Double($0) * 0.5 }
         let new = (1...12).map { old.last! + Double($0) * 60 / 135 }

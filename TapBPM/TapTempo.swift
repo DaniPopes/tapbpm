@@ -22,12 +22,16 @@ struct TapTempo {
         var bpmError: Double? { error.map { 60 * $0 / (period * period) } }
     }
 
-    /// Number of most recent taps used for the fit.
-    static let window = 32
     /// Tempos that can be tapped or reached by scaling.
     static let bpmRange = 20.0...600.0
     /// How far, in beats, an interval may deviate from a whole number of beats.
     static let beatTolerance = 0.25
+    /// Taps further than this fraction of a beat off the fitted line are left out of a refit.
+    static let slop = 0.1
+
+    /// Number of most recent taps used for the fit. Sixteen taps, four bars, is short enough to
+    /// follow a drifting tempo.
+    let window: Int
 
     private(set) var taps: [Tap] = []
     /// Taps in the current session, including those that fell out of the window.
@@ -36,6 +40,12 @@ struct TapTempo {
     private(set) var held: Double?
     /// Time of the last counted tap, kept across sessions to phase the beat indicator.
     private(set) var anchor: TimeInterval?
+    /// Fitted when a tap lands, since the screen reads it every frame.
+    private(set) var fit: Fit?
+
+    init(window: Int = 16) {
+        self.window = window
+    }
 
     /// Seconds per beat in the current session.
     var period: TimeInterval? { fit?.period }
@@ -114,23 +124,35 @@ struct TapTempo {
     }
 
     mutating func reset() {
-        self = TapTempo()
+        self = TapTempo(window: window)
     }
 
     private mutating func endSession() {
         if let liveBPM { held = liveBPM }
         taps = []
         tapCount = 0
+        fit = nil
     }
 
     private mutating func append(_ tap: Tap) {
         taps.append(tap)
-        if taps.count > Self.window { taps.removeFirst() }
+        if taps.count > window { taps.removeFirst() }
         tapCount += 1
         anchor = tap.time
+        fit = Self.fit(taps)
     }
 
-    var fit: Fit? {
+    private static func fit(_ taps: [Tap]) -> Fit? {
+        guard let line = line(through: taps) else { return nil }
+        // Refit without taps far off the line, so one sloppy tap does not drag the tempo.
+        let typical = line.residuals.map(abs).sorted()[taps.count / 2]
+        let limit = max(slop * line.fit.period, 4 * typical)
+        let kept = zip(taps, line.residuals).filter { abs($0.1) <= limit }.map(\.0)
+        guard kept.count < taps.count, kept.count >= 4 else { return line.fit }
+        return Self.line(through: kept)?.fit ?? line.fit
+    }
+
+    private static func line(through taps: [Tap]) -> (fit: Fit, residuals: [TimeInterval])? {
         guard taps.count >= 2 else { return nil }
         let n = Double(taps.count)
         let meanBeat = taps.reduce(0) { $0 + Double($1.beat) } / n
@@ -143,11 +165,9 @@ struct TapTempo {
             sxy += dx * (tap.time - meanTime)
         }
         let slope = sxy / sxx
-        guard taps.count >= 3 else { return Fit(period: slope) }
-        let sse = taps.reduce(0) {
-            let residual = $1.time - meanTime - slope * (Double($1.beat) - meanBeat)
-            return $0 + residual * residual
-        }
-        return Fit(period: slope, error: (sse / (n - 2) / sxx).squareRoot())
+        let residuals = taps.map { $0.time - meanTime - slope * (Double($0.beat) - meanBeat) }
+        let sse = residuals.reduce(0) { $0 + $1 * $1 }
+        let error = taps.count >= 3 ? (sse / (n - 2) / sxx).squareRoot() : nil
+        return (Fit(period: slope, error: error), residuals)
     }
 }

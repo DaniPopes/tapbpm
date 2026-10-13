@@ -54,6 +54,14 @@ enum BeatAnalysis {
     static let border = 6
     /// Seconds of the newest beats that override the whole window when their tempo differs.
     static let recent = 5.0
+    /// How close the models' tempos must be to count as agreeing.
+    static let modelAgreement = 0.04
+    /// Smallest tempo difference treated as a change rather than noise.
+    static let tempoChange = 0.03
+
+    static func agree(_ a: Double, _ b: Double, within tolerance: Double) -> Bool {
+        abs(a / b - 1) < tolerance
+    }
 
     /// Beats as fractional frames: logits above 0 that are the maximum within ±3 frames
     /// (±60 ms), with runs of adjacent peaks merged into their mean.
@@ -82,12 +90,16 @@ enum BeatAnalysis {
     }
 
     /// The median of the models' tempos, which is more accurate than any one model
-    /// (https://github.com/CPJKU/beat_this/issues/13).
+    /// (https://github.com/CPJKU/beat_this/issues/13), if at least two of them agree. Each model
+    /// alone finds a tempo in most windows of speech or random clicks; they rarely agree on one.
     static func estimate(logits: [[Float]], filled: Int, end: TimeInterval) -> Estimate? {
         let estimates = logits
             .compactMap { estimate(beats: beatTimes($0, filled: filled, end: end)) }
             .sorted { $0.fit.bpm < $1.fit.bpm }
-        return estimates.isEmpty ? nil : estimates[estimates.count / 2]
+        guard !estimates.isEmpty else { return nil }
+        let median = estimates[estimates.count / 2]
+        let agreeing = estimates.count { agree($0.fit.bpm, median.fit.bpm, within: modelAgreement) }
+        return agreeing >= 2 ? median : nil
     }
 
     /// Tempo of the beats, or of the last `recent` seconds of them when the two differ by more
@@ -97,13 +109,13 @@ enum BeatAnalysis {
         guard let last = beats.last else { return nil }
         let latest = fit(beats.filter { $0 > last - recent })
         guard let all = fit(beats) else { return latest }
-        if let latest, abs(latest.fit.bpm / all.fit.bpm - 1) > 0.03 { return latest }
+        if let latest, !agree(latest.fit.bpm, all.fit.bpm, within: tempoChange) { return latest }
         return all
     }
 
     /// Reads detected beats like taps, so missed and double beats follow the same rules.
     private static func fit(_ beats: [TimeInterval]) -> Estimate? {
-        var tempo = TapTempo()
+        var tempo = TapTempo(window: .max)
         for beat in beats { tempo.tap(at: beat) }
         guard tempo.tapCount >= 4, let fit = tempo.fit else { return nil }
         return Estimate(fit: fit, beats: beats)

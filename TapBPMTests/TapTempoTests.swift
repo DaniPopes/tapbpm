@@ -39,6 +39,24 @@ struct TapTempoTests {
         try expectBPM(tempo, 120, tolerance: 0.5)
     }
 
+    @Test func sloppyTapIsLeftOut() throws {
+        var times = (0..<10).map { 100 + Double($0) * 0.5 }
+        times[5] += 0.06
+        try expectBPM(tapped(times), 120, tolerance: 1e-6)
+    }
+
+    @Test func followsGradualChange() throws {
+        var time = 100.0
+        var times: [Double] = []
+        for k in 0..<40 {
+            times.append(time)
+            time += 0.6 - 0.15 * Double(k) / 39
+        }
+        // The fit trails a drift by half its window: 16 taps read about 125 here, 32 about 118.
+        let bpm = try #require(tapped(times).bpm)
+        #expect(bpm > 122, "\(bpm) BPM, tapping ends at 133")
+    }
+
     @Test func missedBeatCountsAsTwo() throws {
         let tempo = tapped([100, 100.5, 101, 102, 102.5])
         try expectBPM(tempo, 120)

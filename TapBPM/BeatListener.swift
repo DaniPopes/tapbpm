@@ -16,6 +16,8 @@ final class BeatListener {
 
     /// Seconds of audio needed before the first estimate.
     static let warmUp = 3.0
+    /// Seconds between estimates.
+    static let interval = 0.5
     /// Level of the last second below which the model is skipped, about -54 dBFS.
     static let silence: Float = 0.002
 
@@ -33,6 +35,7 @@ final class BeatListener {
     /// Factor from ½× and 2×, to fix half- or double-time detection.
     private var multiplier = 1.0
     private var tracker: BeatTracker?
+    private var confirmation = Confirmation()
 
     var bpm: Double? { detected.map { $0.bpm * multiplier } }
 
@@ -66,6 +69,7 @@ final class BeatListener {
         lastBeat = nil
         detected = nil
         multiplier = 1
+        confirmation = Confirmation()
     }
 
     /// Listens until the calling task is cancelled.
@@ -84,7 +88,7 @@ final class BeatListener {
             capture = audio
             state = .listening
             while true {
-                try await Task.sleep(for: .milliseconds(500))
+                try await Task.sleep(for: .seconds(Self.interval))
                 guard Double(audio.window.filled) >= Self.warmUp * BeatTracker.sampleRate else { continue }
                 quiet = audio.window.level(ofLast: Int(BeatTracker.sampleRate)) < Self.silence
                 guard !quiet else {
@@ -93,7 +97,7 @@ final class BeatListener {
                 }
                 let window = audio.window.snapshot()
                 let logits = try await tracker.beatLogits(window.samples)
-                update(with: BeatAnalysis.estimate(logits: logits, filled: window.filled, end: window.end))
+                update(with: BeatAnalysis.estimate(logits: logits, filled: window.filled, end: window.end), at: window.end)
             }
         } catch is CancellationError {
         } catch is AudioCapture.Denied {
@@ -110,8 +114,11 @@ final class BeatListener {
         return tracker
     }
 
-    private func update(with estimate: BeatAnalysis.Estimate?) {
-        guard let estimate, TapTempo.bpmRange.contains(estimate.fit.bpm) else {
+    private func update(with estimate: BeatAnalysis.Estimate?, at time: TimeInterval) {
+        guard let estimate,
+              TapTempo.bpmRange.contains(estimate.fit.bpm),
+              confirmation.confirm(estimate.fit.bpm, at: time)
+        else {
             fresh = false
             return
         }
@@ -119,5 +126,24 @@ final class BeatListener {
         fresh = true
         beatCount = estimate.beats.count
         lastBeat = estimate.beats.last
+    }
+}
+
+extension BeatListener {
+    /// Accepts a tempo only when an estimate two to four intervals earlier agrees with it, which
+    /// rejects the chance agreements left on speech and noise.
+    struct Confirmation {
+        private var recent: [(time: TimeInterval, bpm: Double)] = []
+
+        mutating func confirm(_ bpm: Double, at time: TimeInterval) -> Bool {
+            let slack = BeatListener.interval / 5
+            recent.removeAll { time - $0.time > 4 * BeatListener.interval + slack }
+            let confirmed = recent.contains {
+                time - $0.time >= 2 * BeatListener.interval - slack
+                    && BeatAnalysis.agree(bpm, $0.bpm, within: BeatAnalysis.tempoChange)
+            }
+            recent.append((time, bpm))
+            return confirmed
+        }
     }
 }
