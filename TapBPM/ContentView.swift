@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var tempos = Tempos()
+    @AppStorage("source") private var source = AudioCapture.Source.preferred
     /// Whether the session ended without a tempo, leaving nothing to animate.
     @State private var timedOut = false
 
@@ -29,8 +30,8 @@ struct ContentView: View {
             guard (try? await Task.sleep(for: .seconds(tempos.taps.timeout))) != nil else { return }
             timedOut = true
         }
-        .task(id: scenePhase == .background) {
-            if scenePhase != .background { await tempos.music.listen() }
+        .task(id: scenePhase == .background ? nil : source) {
+            if scenePhase != .background { await tempos.music.listen(to: source) }
         }
     }
 
@@ -45,6 +46,10 @@ struct ContentView: View {
                 .keyboardShortcut(.cancelAction)
                 .disabled(!tempos.canReset)
             scaleButton(title: "2×", factor: 2)
+            if AudioCapture.Source.allCases.count > 1 {
+                ControlButton(title: source.title) { source = source.next }
+                    .help("Choose what to listen to")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
@@ -94,6 +99,31 @@ private struct Reading {
     }
 }
 
+private extension AudioCapture.Source {
+    var title: String {
+        switch self {
+        case .microphone: "Mic"
+        #if os(macOS)
+        case .system: "System"
+        #endif
+        }
+    }
+
+    var quietStatus: String {
+        switch self {
+        case .microphone: "NO MUSIC"
+        #if os(macOS)
+        case .system: "NOTHING PLAYING"
+        #endif
+        }
+    }
+
+    var next: Self {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+}
+
 private extension TapTempo {
     func reading(at now: TimeInterval) -> Reading {
         let live = isLive(at: now)
@@ -119,9 +149,10 @@ private extension BeatListener {
         switch state {
         case .off: "PAUSED"
         case .loading: "LOADING MODEL…"
-        case .listening: quiet ? "NO MUSIC" : bpm == nil ? "LISTENING…" : "MUSIC · \(beatCount) BEATS"
+        case .listening where quiet: source.quietStatus
+        case .listening: bpm == nil ? "LISTENING…" : "MUSIC · \(beatCount) BEATS"
         case .denied: "MICROPHONE ACCESS DENIED"
-        case .unavailable: "MICROPHONE UNAVAILABLE"
+        case .unavailable: "\(source.title.uppercased()) UNAVAILABLE"
         }
     }
 

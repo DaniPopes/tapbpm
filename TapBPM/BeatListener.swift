@@ -1,4 +1,4 @@
-import AVFoundation
+import Foundation
 import Observation
 
 /// Streams the tempo of music heard by the microphone, re-estimated twice a second from the
@@ -20,6 +20,7 @@ final class BeatListener {
     static let silence: Float = 0.002
 
     private(set) var state = State.off
+    private(set) var source = AudioCapture.Source.microphone
     /// Whether the latest window had a beat.
     private(set) var fresh = false
     /// Whether the last second was too quiet to hold music.
@@ -68,7 +69,8 @@ final class BeatListener {
     }
 
     /// Listens until the calling task is cancelled.
-    func listen() async {
+    func listen(to source: AudioCapture.Source) async {
+        self.source = source
         state = .loading
         var capture: AudioCapture?
         defer {
@@ -77,12 +79,8 @@ final class BeatListener {
             if state == .loading || state == .listening { state = .off }
         }
         do {
-            guard await AVAudioApplication.requestRecordPermission() else {
-                state = .denied
-                return
-            }
             let tracker = try await loadTracker()
-            let audio = try AudioCapture()
+            let audio = try await AudioCapture(source)
             capture = audio
             state = .listening
             while true {
@@ -98,6 +96,8 @@ final class BeatListener {
                 update(with: BeatAnalysis.estimate(logits: logits, filled: window.filled, end: window.end))
             }
         } catch is CancellationError {
+        } catch is AudioCapture.Denied {
+            state = .denied
         } catch {
             state = .unavailable
         }

@@ -2,15 +2,52 @@ import AVFoundation
 import Accelerate
 import Synchronization
 
-/// Microphone input, resampled into a rolling window for `BeatTracker`.
+/// Audio input, resampled into a rolling window for `BeatTracker`.
 final class AudioCapture {
+    enum Source: String, CaseIterable {
+        case microphone
+        #if os(macOS)
+        /// Everything the Mac plays, which iOS does not allow apps to record.
+        case system
+        #endif
+
+        static var preferred: Source { allCases.last ?? .microphone }
+    }
+
+    struct Denied: Error {}
+
     struct Unavailable: Error {}
 
     let window = AudioWindow(count: BeatTracker.samples)
 
+    private let input: any AudioInput
+
+    init(_ source: Source) async throws {
+        switch source {
+        case .microphone:
+            guard await AVAudioApplication.requestRecordPermission() else { throw Denied() }
+            input = try Microphone(into: window)
+        #if os(macOS)
+        case .system:
+            input = try SystemAudio(into: window)
+        #endif
+        }
+    }
+
+    func stop() {
+        input.stop()
+    }
+}
+
+protocol AudioInput {
+    func stop()
+}
+
+/// The default input device, through `AVAudioEngine`.
+private final class Microphone: AudioInput {
     private let engine = AVAudioEngine()
 
-    init() throws {
+    init(into window: AudioWindow) throws {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         // Measurement mode turns off voice processing; mixing keeps music from other apps playing.
@@ -20,7 +57,7 @@ final class AudioCapture {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, let resampler = Resampler(from: format, to: BeatTracker.sampleRate, into: window) else {
-            throw Unavailable()
+            throw AudioCapture.Unavailable()
         }
         Self.installTap(on: input, format: format, resampler: resampler)
         try engine.start()
@@ -102,8 +139,8 @@ nonisolated final class AudioWindow: Sendable {
     }
 }
 
-/// Converts tap buffers to mono. Used only from the audio tap's thread.
-nonisolated private final class Resampler: @unchecked Sendable {
+/// Converts tap buffers to mono. Used only from one audio thread or queue at a time.
+nonisolated final class Resampler: @unchecked Sendable {
     private let converter: AVAudioConverter
     private let output: AVAudioFormat
     private let window: AudioWindow
