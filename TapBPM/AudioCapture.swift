@@ -68,11 +68,13 @@ nonisolated final class AudioWindow: Sendable {
 
     func append(_ samples: UnsafeBufferPointer<Float>, end: TimeInterval) {
         ring.withLock { ring in
-            for sample in samples {
-                ring.samples[ring.next] = sample
-                ring.next = (ring.next + 1) % ring.samples.count
-            }
-            ring.filled = min(ring.filled + samples.count, ring.samples.count)
+            let count = ring.samples.count
+            let newest = UnsafeBufferPointer(rebasing: samples.suffix(count))
+            let head = min(newest.count, count - ring.next)
+            ring.samples.replaceSubrange(ring.next..<ring.next + head, with: newest[..<head])
+            ring.samples.replaceSubrange(..<(newest.count - head), with: newest[head...])
+            ring.next = (ring.next + newest.count) % count
+            ring.filled = min(ring.filled + newest.count, count)
             ring.end = end
         }
     }
@@ -93,6 +95,8 @@ nonisolated private final class Resampler: @unchecked Sendable {
     private let converter: AVAudioConverter
     private let output: AVAudioFormat
     private let window: AudioWindow
+    /// Reused across callbacks; replaced only when a larger one is needed.
+    private var converted: AVAudioPCMBuffer?
 
     init?(from input: AVAudioFormat, to sampleRate: Double, into window: AudioWindow) {
         guard let output = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1),
@@ -106,7 +110,10 @@ nonisolated private final class Resampler: @unchecked Sendable {
     func append(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime) {
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
         let capacity = AVAudioFrameCount((duration * output.sampleRate).rounded(.up)) + 32
-        guard let converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity) else { return }
+        if (self.converted?.frameCapacity ?? 0) < capacity {
+            self.converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity)
+        }
+        guard let converted = self.converted else { return }
         var consumed = false
         converter.convert(to: converted, error: nil) { _, status in
             if consumed {

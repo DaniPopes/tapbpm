@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var tempo = TapTempo()
-    @State private var listener = BeatListener()
+    @State private var tempos = Tempos()
     /// Whether the session ended without a tempo, leaving nothing to animate.
     @State private var timedOut = false
 
@@ -12,7 +11,7 @@ struct ContentView: View {
         ZStack {
             Color(.ink).ignoresSafeArea()
             // On macOS the pad stays below the hidden title bar so the window can still be dragged.
-            TapPad { tempo.tap(at: $0) }
+            TapPad { tempos.taps.tap(at: $0) }
             #if os(iOS)
                 .ignoresSafeArea()
             #endif
@@ -25,59 +24,48 @@ struct ContentView: View {
                 controls
             }
         }
-        .task(id: tempo.anchor) {
+        .task(id: tempos.taps.anchor) {
             timedOut = false
-            guard (try? await Task.sleep(for: .seconds(tempo.timeout))) != nil else { return }
+            guard (try? await Task.sleep(for: .seconds(tempos.taps.timeout))) != nil else { return }
             timedOut = true
         }
         .task(id: scenePhase == .background) {
-            if scenePhase != .background { await listener.listen() }
+            if scenePhase != .background { await tempos.music.listen() }
         }
     }
 
     private var animating: Bool {
-        listener.bpm != nil || tempo.bpm != nil || (tempo.anchor != nil && !timedOut)
+        tempos.music.bpm != nil || tempos.taps.bpm != nil || (tempos.taps.anchor != nil && !timedOut)
     }
 
     private var controls: some View {
         HStack(spacing: 12) {
-            ControlButton(title: "½×") { scale(by: 0.5) }
-                .disabled(!canScale(by: 0.5))
-            ControlButton(title: "Reset") {
-                listener.reset()
-                tempo.reset()
-            }
-            .keyboardShortcut(.cancelAction)
-            .disabled(tempo.anchor == nil && listener.bpm == nil)
-            ControlButton(title: "2×") { scale(by: 2) }
-                .disabled(!canScale(by: 2))
+            scaleButton(title: "½×", factor: 0.5)
+            ControlButton(title: "Reset") { tempos.reset() }
+                .keyboardShortcut(.cancelAction)
+                .disabled(!tempos.canReset)
+            scaleButton(title: "2×", factor: 2)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
     }
 
-    /// Taps lead while a tap session runs, or when the music has no tempo yet.
-    private func tapsLead(at now: TimeInterval) -> Bool {
-        tempo.isLive(at: now) || (tempo.bpm != nil && listener.bpm == nil)
+    private func scaleButton(title: String, factor: Double) -> some View {
+        ControlButton(title: title) { tempos.scale(by: factor, at: ProcessInfo.processInfo.systemUptime) }
+            .disabled(!tempos.canScale(by: factor, at: ProcessInfo.processInfo.systemUptime))
     }
 
     private func reading(at now: TimeInterval) -> Reading {
-        if tapsLead(at: now) {
-            var reading = tempo.reading(at: now)
-            reading.other = listener.bpm.map { "MUSIC \(Reading.format($0))" } ?? listener.status
+        switch tempos.leader(at: now) {
+        case .taps:
+            var reading = tempos.taps.reading(at: now)
+            reading.other = tempos.music.bpm.map { .tempo("MUSIC", $0) } ?? .hint(tempos.music.status)
+            return reading
+        case .music:
+            var reading = tempos.music.reading(at: now)
+            reading.other = tempos.taps.bpm.map { .tempo("TAPS", $0) } ?? .hint(TapPad.prompt)
             return reading
         }
-        var reading = listener.reading(at: now)
-        reading.other = tempo.bpm.map { "TAPS \(Reading.format($0))" } ?? TapPad.prompt
-        return reading
-    }
-
-    private func canScale(by factor: Double) -> Bool {
-        tapsLead(at: ProcessInfo.processInfo.systemUptime) ? tempo.canScale(by: factor) : listener.canScale(by: factor)
-    }
-
-    private func scale(by factor: Double) {
-        if tapsLead(at: ProcessInfo.processInfo.systemUptime) { tempo.scale(by: factor) } else { listener.scale(by: factor) }
     }
 }
 
@@ -93,8 +81,13 @@ private struct Reading {
     var sinceBeat: TimeInterval?
     /// Position within the beat, which drives the beat dot.
     var phase: Double?
-    /// The tempo from the other source, or a hint.
-    var other = ""
+    /// The tempo from the other source, or a hint when it has none.
+    var other = Other.hint("")
+
+    enum Other: Equatable {
+        case tempo(String, Double)
+        case hint(String)
+    }
 
     static func format(_ bpm: Double) -> String {
         bpm.formatted(.number.precision(.fractionLength(1)))
@@ -170,7 +163,7 @@ private struct Readout: View {
                     .fill(Color.accentColor)
                     .frame(width: 18, height: 18)
                     .opacity(reading.phase.map { exp(-5 * $0) } ?? 0)
-                Caption(text: reading.other)
+                OtherCaption(other: reading.other)
             }
         }
     }
@@ -184,6 +177,18 @@ private struct Caption: View {
             .font(.system(.footnote, design: .rounded).weight(.semibold))
             .tracking(2)
             .foregroundStyle(.white.opacity(0.5))
+    }
+}
+
+/// Takes a plain value so SwiftUI skips formatting on frames where it did not change.
+private struct OtherCaption: View {
+    let other: Reading.Other
+
+    var body: some View {
+        switch other {
+        case .tempo(let source, let bpm): Caption(text: "\(source) \(Reading.format(bpm))")
+        case .hint(let hint): Caption(text: hint)
+        }
     }
 }
 
