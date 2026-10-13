@@ -1,0 +1,112 @@
+import AVFoundation
+import Observation
+
+/// Streams the tempo of music heard by the microphone, re-estimated twice a second from the
+/// last 10 s of audio. The estimate outlives `listen()`, so it stays on screen while the app is
+/// in the background.
+@Observable
+final class BeatListener {
+    enum State {
+        case off
+        case loading
+        case listening
+        case denied
+        case unavailable
+    }
+
+    /// Seconds of audio needed before the first estimate.
+    static let warmUp = 3.0
+
+    private(set) var state = State.off
+    /// Whether the latest window had a beat.
+    private(set) var fresh = false
+    private(set) var beatCount = 0
+    /// Uptime of the latest detected beat.
+    private(set) var lastBeat: TimeInterval?
+
+    private var detected: TapTempo.Fit?
+    /// Factor from ½× and 2×, to fix half- or double-time detection.
+    private var multiplier = 1.0
+    private var tracker: BeatTracker?
+
+    var bpm: Double? { detected.map { $0.bpm * multiplier } }
+
+    var bpmError: Double? { detected?.bpmError.map { $0 * multiplier } }
+
+    func beatPhase(at now: TimeInterval) -> Double? {
+        TapTempo.beatPhase(at: now, bpm: bpm, anchor: lastBeat)
+    }
+
+    /// Time since the latest beat the tempo predicts, since detected beats arrive up to half a
+    /// second late.
+    func sinceBeat(at now: TimeInterval) -> TimeInterval? {
+        guard let bpm, let phase = beatPhase(at: now) else { return nil }
+        return phase * 60 / bpm
+    }
+
+    func canScale(by factor: Double) -> Bool {
+        TapTempo.canScale(bpm, by: factor)
+    }
+
+    func scale(by factor: Double) {
+        if canScale(by: factor) { multiplier *= factor }
+    }
+
+    /// Forgets the estimate and keeps listening.
+    func reset() {
+        fresh = false
+        beatCount = 0
+        lastBeat = nil
+        detected = nil
+        multiplier = 1
+    }
+
+    /// Listens until the calling task is cancelled.
+    func listen() async {
+        state = .loading
+        var capture: AudioCapture?
+        defer {
+            capture?.stop()
+            fresh = false
+            if state == .loading || state == .listening { state = .off }
+        }
+        do {
+            guard await AVAudioApplication.requestRecordPermission() else {
+                state = .denied
+                return
+            }
+            let tracker = try await loadTracker()
+            let audio = try AudioCapture()
+            capture = audio
+            state = .listening
+            while true {
+                try await Task.sleep(for: .milliseconds(500))
+                guard Double(audio.window.filled) >= Self.warmUp * BeatTracker.sampleRate else { continue }
+                let window = audio.window.snapshot()
+                let logits = try await tracker.beatLogits(window.samples)
+                update(with: BeatAnalysis.beatTimes(logits, filled: window.filled, end: window.end))
+            }
+        } catch is CancellationError {
+        } catch {
+            state = .unavailable
+        }
+    }
+
+    private func loadTracker() async throws -> BeatTracker {
+        if let tracker { return tracker }
+        let tracker = try await BeatTracker()
+        self.tracker = tracker
+        return tracker
+    }
+
+    private func update(with beats: [TimeInterval]) {
+        guard let fit = BeatAnalysis.tempo(beats: beats), TapTempo.bpmRange.contains(fit.bpm) else {
+            fresh = false
+            return
+        }
+        detected = fit
+        fresh = true
+        beatCount = beats.count
+        lastBeat = beats.last
+    }
+}

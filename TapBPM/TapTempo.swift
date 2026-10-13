@@ -1,6 +1,7 @@
 import Foundation
 
-/// Estimates tempo from tap timestamps with a least-squares fit of tap time against beat number.
+/// Estimates tempo from beat timestamps, tapped or detected, with a least-squares fit of tap
+/// time against beat number.
 ///
 /// A fit uses every tap in the window, unlike averaging intervals, where all but the first and
 /// last tap cancel out. Missed beats are tolerated, accidental double taps are dropped, and a
@@ -9,6 +10,16 @@ struct TapTempo {
     struct Tap {
         var time: TimeInterval
         var beat: Int
+    }
+
+    /// Seconds per beat and its standard error, which needs at least three taps.
+    struct Fit {
+        var period: TimeInterval
+        var error: TimeInterval? = nil
+
+        var bpm: Double { 60 / period }
+
+        var bpmError: Double? { error.map { 60 * $0 / (period * period) } }
     }
 
     /// Number of most recent taps used for the fit.
@@ -29,14 +40,11 @@ struct TapTempo {
     /// Seconds per beat in the current session.
     var period: TimeInterval? { fit?.period }
 
-    var liveBPM: Double? { period.map { 60 / $0 } }
+    var liveBPM: Double? { fit?.bpm }
 
     var bpm: Double? { liveBPM ?? held }
 
-    var bpmError: Double? {
-        guard let fit, let error = fit.error else { return nil }
-        return 60 * error / (fit.period * fit.period)
-    }
+    var bpmError: Double? { fit?.bpmError }
 
     /// Time without a tap after which the next tap starts a new session. Before a tempo is
     /// known, it allows the slowest tempo in `bpmRange`.
@@ -54,12 +62,20 @@ struct TapTempo {
 
     /// Position within the current beat at the shown tempo, from 0 on a beat towards 1.
     func beatPhase(at now: TimeInterval) -> Double? {
+        Self.beatPhase(at: now, bpm: bpm, anchor: anchor)
+    }
+
+    static func beatPhase(at now: TimeInterval, bpm: Double?, anchor: TimeInterval?) -> Double? {
         guard let bpm, let anchor else { return nil }
         return ((now - anchor) * bpm / 60).truncatingRemainder(dividingBy: 1)
     }
 
     func canScale(by factor: Double) -> Bool {
-        bpm.map { Self.bpmRange.contains($0 * factor) } ?? false
+        Self.canScale(bpm, by: factor)
+    }
+
+    static func canScale(_ bpm: Double?, by factor: Double) -> Bool {
+        bpm.map { bpmRange.contains($0 * factor) } ?? false
     }
 
     /// Records a tap and returns whether it was counted.
@@ -114,8 +130,7 @@ struct TapTempo {
         anchor = tap.time
     }
 
-    /// Seconds per beat and its standard error, which needs at least three taps.
-    private var fit: (period: TimeInterval, error: TimeInterval?)? {
+    var fit: Fit? {
         guard taps.count >= 2 else { return nil }
         let n = Double(taps.count)
         let meanBeat = taps.reduce(0) { $0 + Double($1.beat) } / n
@@ -128,11 +143,11 @@ struct TapTempo {
             sxy += dx * (tap.time - meanTime)
         }
         let slope = sxy / sxx
-        guard taps.count >= 3 else { return (slope, nil) }
+        guard taps.count >= 3 else { return Fit(period: slope) }
         let sse = taps.reduce(0) {
             let residual = $1.time - meanTime - slope * (Double($1.beat) - meanBeat)
             return $0 + residual * residual
         }
-        return (slope, (sse / (n - 2) / sxx).squareRoot())
+        return Fit(period: slope, error: (sse / (n - 2) / sxx).squareRoot())
     }
 }
