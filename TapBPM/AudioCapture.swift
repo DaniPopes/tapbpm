@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import Synchronization
 
 /// Microphone input, resampled into a rolling window for `BeatTracker`.
@@ -65,6 +66,17 @@ nonisolated final class AudioWindow: Sendable {
     }
 
     var filled: Int { ring.withLock { $0.filled } }
+
+    /// Root mean square of the newest `count` samples.
+    func level(ofLast count: Int) -> Float {
+        ring.withLock { ring in
+            let count = min(count, ring.samples.count)
+            let head = min(count, ring.next)
+            let sum = vDSP.sumOfSquares(ring.samples[(ring.next - head)..<ring.next])
+                + vDSP.sumOfSquares(ring.samples[(ring.samples.count - count + head)...])
+            return (sum / Float(count)).squareRoot()
+        }
+    }
 
     func append(_ samples: UnsafeBufferPointer<Float>, end: TimeInterval) {
         ring.withLock { ring in

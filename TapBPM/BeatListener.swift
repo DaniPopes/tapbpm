@@ -16,10 +16,14 @@ final class BeatListener {
 
     /// Seconds of audio needed before the first estimate.
     static let warmUp = 3.0
+    /// Level of the last second below which the model is skipped, about -54 dBFS.
+    static let silence: Float = 0.002
 
     private(set) var state = State.off
     /// Whether the latest window had a beat.
     private(set) var fresh = false
+    /// Whether the last second was too quiet to hold music.
+    private(set) var quiet = false
     private(set) var beatCount = 0
     /// Uptime of the latest detected beat.
     private(set) var lastBeat: TimeInterval?
@@ -33,15 +37,16 @@ final class BeatListener {
 
     var bpmError: Double? { detected?.bpmError.map { $0 * multiplier } }
 
-    func beatPhase(at now: TimeInterval) -> Double? {
-        TapTempo.beatPhase(at: now, bpm: bpm, anchor: lastBeat)
+    /// Whether beats are still arriving. Detected beats lag by up to a beat plus the half second
+    /// between estimates, so this allows longer than `TapTempo.timeout` does for taps.
+    func isLive(at now: TimeInterval) -> Bool {
+        guard fresh, let bpm, let lastBeat else { return false }
+        return now - lastBeat < max(2.5, 120 / bpm)
     }
 
-    /// Time since the latest beat the tempo predicts, since detected beats arrive up to half a
-    /// second late.
-    func sinceBeat(at now: TimeInterval) -> TimeInterval? {
-        guard let bpm, let phase = beatPhase(at: now) else { return nil }
-        return phase * 60 / bpm
+    /// Position within the beat while beats are arriving, so the pulse stops with the music.
+    func beatPhase(at now: TimeInterval) -> Double? {
+        isLive(at: now) ? TapTempo.beatPhase(at: now, bpm: bpm, anchor: lastBeat) : nil
     }
 
     func canScale(by factor: Double) -> Bool {
@@ -55,6 +60,7 @@ final class BeatListener {
     /// Forgets the estimate and keeps listening.
     func reset() {
         fresh = false
+        quiet = false
         beatCount = 0
         lastBeat = nil
         detected = nil
@@ -82,9 +88,14 @@ final class BeatListener {
             while true {
                 try await Task.sleep(for: .milliseconds(500))
                 guard Double(audio.window.filled) >= Self.warmUp * BeatTracker.sampleRate else { continue }
+                quiet = audio.window.level(ofLast: Int(BeatTracker.sampleRate)) < Self.silence
+                guard !quiet else {
+                    fresh = false
+                    continue
+                }
                 let window = audio.window.snapshot()
                 let logits = try await tracker.beatLogits(window.samples)
-                update(with: BeatAnalysis.beatTimes(logits, filled: window.filled, end: window.end))
+                update(with: BeatAnalysis.estimate(logits: logits, filled: window.filled, end: window.end))
             }
         } catch is CancellationError {
         } catch {
@@ -99,14 +110,14 @@ final class BeatListener {
         return tracker
     }
 
-    private func update(with beats: [TimeInterval]) {
-        guard let fit = BeatAnalysis.tempo(beats: beats), TapTempo.bpmRange.contains(fit.bpm) else {
+    private func update(with estimate: BeatAnalysis.Estimate?) {
+        guard let estimate, TapTempo.bpmRange.contains(estimate.fit.bpm) else {
             fresh = false
             return
         }
-        detected = fit
+        detected = estimate.fit
         fresh = true
-        beatCount = beats.count
-        lastBeat = beats.last
+        beatCount = estimate.beats.count
+        lastBeat = estimate.beats.last
     }
 }

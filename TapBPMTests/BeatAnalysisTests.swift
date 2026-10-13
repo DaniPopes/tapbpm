@@ -60,21 +60,28 @@ struct BeatAnalysisTests {
 
     @Test func tempoCountsMissedBeats() throws {
         let beats = [10, 10.5, 11, 12, 12.5, 13, 13.5]
-        let fit = try #require(BeatAnalysis.tempo(beats: beats))
-        #expect(abs(fit.bpm - 120) < 1e-9)
+        let estimate = try #require(BeatAnalysis.estimate(beats: beats))
+        #expect(abs(estimate.fit.bpm - 120) < 1e-9)
     }
 
     @Test func tempoNeedsFourBeats() {
-        #expect(BeatAnalysis.tempo(beats: [1, 1.5, 2]) == nil)
+        #expect(BeatAnalysis.estimate(beats: [1, 1.5, 2]) == nil)
+    }
+
+    @Test func tempoFollowsRecentChange() throws {
+        let old = (0..<12).map { 100 + Double($0) * 0.5 }
+        let new = (1...12).map { old.last! + Double($0) * 60 / 135 }
+        let estimate = try #require(BeatAnalysis.estimate(beats: old + new))
+        #expect(abs(estimate.fit.bpm - 135) < 0.5, "detected \(estimate.fit.bpm) BPM")
+        #expect(estimate.beats.allSatisfy { $0 > new[0] - 1 })
     }
 
     @Test(arguments: [90.0, 100, 128, 174])
     func modelFindsTempoOfDrums(bpm: Double) async throws {
         let tracker = try await BeatTracker()
         let logits = try await tracker.beatLogits(drums(bpm: bpm))
-        #expect(logits.count == BeatTracker.frames)
-        let beats = BeatAnalysis.beatTimes(logits, filled: BeatTracker.samples, end: 0)
-        let fit = try #require(BeatAnalysis.tempo(beats: beats))
-        #expect(abs(fit.bpm - bpm) < 1, "detected \(fit.bpm) BPM")
+        #expect(logits.count == BeatTracker.models && logits.allSatisfy { $0.count == BeatTracker.frames })
+        let estimate = try #require(BeatAnalysis.estimate(logits: logits, filled: BeatTracker.samples, end: 0))
+        #expect(abs(estimate.fit.bpm - bpm) < 1, "detected \(estimate.fit.bpm) BPM")
     }
 }

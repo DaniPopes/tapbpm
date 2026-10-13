@@ -35,7 +35,7 @@ struct ContentView: View {
     }
 
     private var animating: Bool {
-        tempos.music.bpm != nil || tempos.taps.bpm != nil || (tempos.taps.anchor != nil && !timedOut)
+        tempos.music.fresh || tempos.taps.bpm != nil || (tempos.taps.anchor != nil && !timedOut)
     }
 
     private var controls: some View {
@@ -77,8 +77,8 @@ private struct Reading {
     var fresh: Bool
     /// Fill of the ring around the number, from 0 to 1.
     var ring: Double
-    /// Time since the last tap or beat, which drives the background flash.
-    var sinceBeat: TimeInterval?
+    /// Time since the last tap, which drives the background flash.
+    var sinceBeat: TimeInterval? = nil
     /// Position within the beat, which drives the beat dot.
     var phase: Double?
     /// The tempo from the other source, or a hint when it has none.
@@ -119,7 +119,7 @@ private extension BeatListener {
         switch state {
         case .off: "PAUSED"
         case .loading: "LOADING MODEL…"
-        case .listening: bpm == nil ? "LISTENING…" : "MUSIC · \(beatCount) BEATS"
+        case .listening: quiet ? "NO MUSIC" : bpm == nil ? "LISTENING…" : "MUSIC · \(beatCount) BEATS"
         case .denied: "MICROPHONE ACCESS DENIED"
         case .unavailable: "MICROPHONE UNAVAILABLE"
         }
@@ -131,8 +131,7 @@ private extension BeatListener {
             bpm: bpm,
             error: bpmError,
             fresh: fresh,
-            ring: state == .listening && bpm != nil ? 1 : 0,
-            sinceBeat: sinceBeat(at: now),
+            ring: isLive(at: now) ? 1 : 0,
             phase: beatPhase(at: now)
         )
     }

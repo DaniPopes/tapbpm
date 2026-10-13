@@ -8,10 +8,12 @@
 #     "torchaudio==2.7.0",
 # ]
 # ///
-"""Converts the Beat This! beat tracker to a Core ML model that takes raw audio.
+"""Converts the three small Beat This! beat trackers to one Core ML model that takes raw audio.
 
-The log-mel front-end is rebuilt from a strided convolution so the whole pipeline runs in Core ML;
-the script checks it against the reference `LogMelSpect` and the converted model against PyTorch.
+The small models estimate tempo better than the large one, and the median of their tempos better
+still (https://github.com/CPJKU/beat_this/issues/13). The log-mel front-end is rebuilt from a
+strided convolution so the whole pipeline runs in Core ML; the script checks it against the
+reference `LogMelSpect` and the converted model against PyTorch.
 
     uv run scripts/convert_beat_this.py
 """
@@ -30,6 +32,7 @@ from beat_this.preprocessing import LogMelSpect
 SAMPLE_RATE = 22050
 N_FFT = 1024
 HOP = 441
+CHECKPOINTS = ["small0", "small1", "small2"]
 FRAMES = 500  # 10 s at 50 frames per second.
 SAMPLES = (FRAMES - 1) * HOP + N_FFT
 OUTPUT = Path(__file__).resolve().parent.parent / "TapBPM" / "BeatThis.mlpackage"
@@ -60,17 +63,24 @@ class LogMel(torch.nn.Module):
         return torch.log(mel + 1e-3) + math.log(1000)
 
 
+def beat_logits(model, spect):
+    x = model.transformer_blocks(model.frontend(spect))
+    # SumHead without its autocast guard, which torch.export cannot trace.
+    logits = model.task_heads.beat_downbeat_lin(x)
+    return logits[..., 0] + logits[..., 1]
+
+
 class BeatTracker(torch.nn.Module):
-    def __init__(self, model):
+    """Runs each model on one shared log-mel spectrogram; returns (1, models, frames) logits."""
+
+    def __init__(self, models):
         super().__init__()
         self.logmel = LogMel()
-        self.model = model
+        self.models = torch.nn.ModuleList(models)
 
     def forward(self, audio):
-        x = self.model.transformer_blocks(self.model.frontend(self.logmel(audio)))
-        # SumHead without its autocast guard, which torch.export cannot trace.
-        logits = self.model.task_heads.beat_downbeat_lin(x)
-        return logits[..., 0] + logits[..., 1]
+        spect = self.logmel(audio)
+        return torch.stack([beat_logits(model, spect) for model in self.models], dim=1)
 
 
 def click_track(bpm, seconds):
@@ -91,8 +101,8 @@ def click_track(bpm, seconds):
 
 
 def main():
-    model = load_model("final0", device="cpu")
-    tracker = BeatTracker(model).eval()
+    models = [load_model(name, device="cpu") for name in CHECKPOINTS]
+    tracker = BeatTracker(models).eval()
 
     audio = torch.from_numpy(click_track(120, SAMPLES / SAMPLE_RATE + 1)[:SAMPLES])[None]
     with torch.no_grad():
@@ -102,7 +112,9 @@ def main():
         ours = tracker.logmel(padded)[0]
         print("log-mel max abs error:", (reference - ours).abs().max().item())
         expected = tracker(audio)
-        assert torch.equal(expected, model(tracker.logmel(audio))["beat"])
+        spect = tracker.logmel(audio)
+        for i, model in enumerate(models):
+            assert torch.equal(expected[:, i], model(spect)["beat"])
 
     # Keep aten.linear: the default decompositions turn batched linears into matmuls with the
     # weights expanded per frame, which multiplies the model size by five.
@@ -119,21 +131,23 @@ def main():
         inputs=[ct.TensorType(name="audio", dtype=np.float32)],
         outputs=[ct.TensorType(name="beat", dtype=np.float32)],
         minimum_deployment_target=ct.target.iOS18,
-        compute_precision=ct.precision.FLOAT16,
+        # The small models drift from PyTorch in float16, finding different beats.
+        compute_precision=ct.precision.FLOAT32,
     )
     mlmodel.author = "Francesco Foscarin, Jan Schlüter, Gerhard Widmer (JKU Linz)"
     mlmodel.license = "MIT"
     mlmodel.short_description = (
-        "Beat This! final0 beat tracker. Input: 10 s of mono audio at 22050 Hz. "
-        "Output: beat logits at 50 frames per second; frame i is centred on sample 441 i + 512."
+        f"Beat This! {', '.join(CHECKPOINTS)} beat trackers. Input: 10 s of mono audio at 22050 Hz. "
+        "Output: beat logits per model at 50 frames per second; frame i is centred on sample 441 i + 512."
     )
     mlmodel.save(OUTPUT)
 
     actual = torch.from_numpy(mlmodel.predict({"audio": audio.numpy()})["beat"])
     print("Core ML beat logit max abs error:", (actual - expected).abs().max().item())
     peaks = lambda x: set(np.flatnonzero(((x == F.max_pool1d(x[None], 7, 1, 3)[0]) & (x > 0))[0].numpy()))
-    print("beat frames, PyTorch:", sorted(map(int, peaks(expected))))
-    print("beat frames, Core ML:", sorted(map(int, peaks(actual))))
+    for i, name in enumerate(CHECKPOINTS):
+        print(f"{name} beat frames, PyTorch:", sorted(map(int, peaks(expected[:, i]))))
+        print(f"{name} beat frames, Core ML:", sorted(map(int, peaks(actual[:, i]))))
     print("saved", OUTPUT)
 
 
