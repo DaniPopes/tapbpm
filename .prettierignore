@@ -1,7 +1,0 @@
-dist
-ios/App/App/capacitor.config.json
-ios/App/App/public
-node_modules
-target
-src-tauri/gen
-src-tauri/target
