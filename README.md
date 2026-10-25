@@ -6,8 +6,8 @@ beat tracker runs on the device and streams the tempo of whatever it hears, alon
 ## Web app
 
 The web app runs on any phone or computer and installs from the browser, with nothing to sign.
-On an iPhone, open it in Safari and choose Share → Add to Home Screen. It listens through the
-microphone and works offline once loaded.
+On an iPhone, open it in Safari and choose Share → Add to Home Screen. Press Listen to detect
+the tempo through the microphone; it works offline once loaded.
 
 ```sh
 cd web

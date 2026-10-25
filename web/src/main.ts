@@ -38,12 +38,14 @@ const ui = {
   dot: element("dot"),
   other: element("other"),
   reset: element("reset") as HTMLButtonElement,
+  listen: element("listen") as HTMLButtonElement,
   scales: [...document.querySelectorAll<HTMLButtonElement>("[data-scale]")],
 };
 
 function musicStatus() {
   switch (listener.state) {
     case "off":
+      return "";
     case "paused":
       return "PAUSED";
     case "loading":
@@ -104,6 +106,7 @@ function render() {
   ui.dot.style.opacity = String(r.phase === undefined ? 0 : Math.exp(-5 * r.phase));
   setText(ui.other, debug ? `${Math.round(listener.inferenceTime)} MS · ${r.other}` : r.other);
   ui.reset.disabled = !tempos.canReset;
+  setText(ui.listen, listening() ? "Stop" : "Listen");
   for (const button of ui.scales) button.disabled = !tempos.canScale(Number(button.dataset.scale), time);
   return r.ring > 0 || r.phase !== undefined || flash > 0;
 }
@@ -141,6 +144,17 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+/** Whether the microphone is on or starting, so the button stops it. */
+const listening = () => ["loading", "waiting", "listening", "paused"].includes(listener.state);
+
+// iOS forgets microphone permission for home-screen apps on every launch, so the app only asks
+// when you choose to listen.
+ui.listen.addEventListener("click", () => {
+  if (listening()) listener.stop();
+  else void listener.start();
+  wake();
+});
+
 ui.reset.addEventListener("click", () => {
   tempos.reset();
   wake();
@@ -156,10 +170,9 @@ for (const button of ui.scales) {
 listener.onChange = wake;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) listener.pause();
-  else void listener.start();
+  else if (listener.state === "paused") void listener.start();
 });
 
-void listener.start();
 wake();
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
