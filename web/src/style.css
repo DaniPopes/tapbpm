@@ -1,0 +1,133 @@
+:root {
+  --ink: #0a0a0c;
+  --accent: #ff6b3d;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--ink);
+  color: #fff;
+  font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#pad {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
+  touch-action: none;
+}
+
+#flash {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.caption {
+  position: relative;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgb(255 255 255 / 50%);
+  text-align: center;
+  min-height: 1.2em;
+}
+
+#dial {
+  position: relative;
+  width: min(300px, 80vw);
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#dial svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+#dial circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.track {
+  stroke: rgb(255 255 255 / 8%);
+}
+
+#ring {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+#bpm {
+  font-size: min(120px, 30vw);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+#detail {
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 50%);
+}
+
+#dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+}
+
+#controls {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 12px;
+}
+
+#controls button {
+  flex: 1;
+  padding: 16px 0;
+  border: none;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  color: rgb(255 255 255 / 85%);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+#controls button:disabled {
+  color: rgb(255 255 255 / 30%);
+}

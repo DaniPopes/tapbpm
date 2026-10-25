@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TapBPM" />
+    <meta name="description" content="Tap along or let it listen to find the tempo of any song." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <title>TapBPM</title>
+  </head>
+  <body>
+    <main id="pad">
+      <div id="flash"></div>
+      <p id="status" class="caption"></p>
+      <div id="dial">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="track" cx="50" cy="50" r="48" />
+          <circle id="ring" cx="50" cy="50" r="48" pathLength="1" />
+        </svg>
+        <div id="bpm">–</div>
+        <div id="detail">BPM</div>
+      </div>
+      <div id="dot"></div>
+      <p id="other" class="caption"></p>
+      <nav id="controls">
+        <button data-scale="0.5">½×</button>
+        <button id="reset">Reset</button>
+        <button data-scale="2">2×</button>
+      </nav>
+    </main>
+    <script type="module" src="src/main.ts"></script>
+  </body>
+</html>
