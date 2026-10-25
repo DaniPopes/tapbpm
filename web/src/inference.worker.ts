@@ -2,7 +2,7 @@ import modelUrl from "../models/beat_this.onnx?url";
 import { perModel } from "./analysis";
 
 /** Runs the bundled Beat This! models off the main thread. */
-const webgpu = "gpu" in navigator;
+const webgpu = "gpu" in navigator && self.name !== "wasm";
 // Fetch the model while the runtime loads. The WebGPU build ships a 27 MB runtime, so browsers
 // without WebGPU get the 14 MB plain one.
 const bytes = fetch(modelUrl).then((response) => response.arrayBuffer());

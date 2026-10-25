@@ -2,7 +2,7 @@ import { Confirmation, type Estimate, estimateFromLogits, model } from "./analys
 import workletUrl from "./capture.worklet.ts?worker&url";
 import { beatPhase, canScale, fitBPM, fitBPMError, inRange } from "./tempo";
 
-export type ListenState = "off" | "loading" | "waiting" | "listening" | "denied" | "unavailable";
+export type ListenState = "off" | "loading" | "waiting" | "listening" | "paused" | "denied" | "unavailable";
 
 /** The latest `model.samples` samples at the model's rate, oldest first. */
 class Window {
@@ -44,7 +44,11 @@ class Window {
 /** The inference worker, with one promise per request. */
 class Inference {
   readonly ready: Promise<void>;
-  private readonly worker = new Worker(new URL("./inference.worker.ts", import.meta.url), { type: "module" });
+  // `?ep=wasm` forces the CPU runtime, to compare it with WebGPU on a device.
+  private readonly worker = new Worker(new URL("./inference.worker.ts", import.meta.url), {
+    type: "module",
+    name: new URLSearchParams(location.search).get("ep") ?? "",
+  });
   private readonly requests = new Map<number, { resolve(logits: Float32Array[]): void; reject(error: Error): void }>();
   private next = 0;
 
@@ -151,6 +155,7 @@ export class BeatListener {
 
   async start() {
     if (this.state === "loading" || this.state === "listening" || this.state === "waiting") return;
+    if (this.state === "paused") return this.unpause();
     const session = ++this.session;
     this.setState("loading");
     // The model loads while the microphone starts and the first seconds of audio arrive.
@@ -168,14 +173,38 @@ export class BeatListener {
       return;
     }
     if (session !== this.session) return;
-    this.setState(this.context?.state === "running" ? "listening" : "waiting");
+    this.setRunningState();
     await this.listen(session);
+  }
+
+  /**
+   * Suspends audio while the page is hidden but keeps the microphone, since asking for it again
+   * makes Safari prompt again.
+   */
+  pause() {
+    if (this.state !== "listening" && this.state !== "waiting") return;
+    this.session++;
+    void this.context?.suspend();
+    this.fresh = false;
+    this.setState("paused");
+  }
+
+  private async unpause() {
+    if (this.stream?.getAudioTracks().some((track) => track.readyState === "live")) {
+      await this.context?.resume();
+      this.setRunningState();
+      await this.listen(++this.session);
+    } else {
+      // The system ended the microphone while the page was hidden.
+      this.stop();
+      await this.start();
+    }
   }
 
   /** Resumes audio that the browser kept suspended until a user gesture. */
   resume() {
     if (this.state !== "waiting" || !this.context) return;
-    void this.context.resume().then(() => this.setState("listening"));
+    void this.context.resume().then(() => this.setRunningState());
   }
 
   stop() {
@@ -241,6 +270,11 @@ export class BeatListener {
       this.fresh = false;
     }
     this.onChange();
+  }
+
+  /** Listening once audio runs; Safari keeps a new context suspended until a user gesture. */
+  private setRunningState() {
+    this.setState(this.context?.state === "running" ? "listening" : "waiting");
   }
 
   private setState(state: ListenState) {

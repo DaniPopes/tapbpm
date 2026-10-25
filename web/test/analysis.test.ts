@@ -9,7 +9,12 @@ function drums(bpm: number) {
   const add = (start: number, length: number, sample: (t: number) => number) => {
     for (let n = 0; n < Math.min(length, audio.length - start); n++) audio[start + n] += sample(n / model.sampleRate);
   };
-  const noise = () => Math.random() * 2 - 1;
+  // A fixed linear congruential generator, so every run hears the same drums.
+  let seed = 1;
+  const noise = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return (seed / 2 ** 32) * 2 - 1;
+  };
   const eighth = 30 / bpm;
   for (let index = 0; index * eighth * model.sampleRate < audio.length; index++) {
     const start = Math.floor(index * eighth * model.sampleRate);

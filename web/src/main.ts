@@ -43,6 +43,7 @@ const ui = {
 function musicStatus() {
   switch (listener.state) {
     case "off":
+    case "paused":
       return "PAUSED";
     case "loading":
       return "LOADING MODEL…";
@@ -153,7 +154,7 @@ for (const button of ui.scales) {
 
 listener.onChange = wake;
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) listener.stop();
+  if (document.hidden) listener.pause();
   else void listener.start();
 });
 
