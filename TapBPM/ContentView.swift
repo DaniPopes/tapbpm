@@ -10,7 +10,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            Color(.ink).ignoresSafeArea()
+            Color(.paper).ignoresSafeArea()
             // On macOS the pad stays below the hidden title bar so the window can still be dragged.
             TapPad { tempos.taps.tap(at: $0) }
             #if os(iOS)
@@ -40,9 +40,9 @@ struct ContentView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             scaleButton(title: "½×", factor: 0.5)
-            ControlButton(title: "Reset") { tempos.reset() }
+            ControlButton(title: "Reset", primary: true) { tempos.reset() }
                 .keyboardShortcut(.cancelAction)
                 .disabled(!tempos.canReset)
             scaleButton(title: "2×", factor: 2)
@@ -52,7 +52,7 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        .padding(.bottom, 16)
     }
 
     private func scaleButton(title: String, factor: Double) -> some View {
@@ -174,24 +174,24 @@ private struct Readout: View {
 
     var body: some View {
         ZStack {
-            Color.accentColor
-                .opacity(0.2 * max(0, 1 - (reading.sinceBeat ?? .infinity) / 0.15))
+            Color.primary
+                .opacity(0.06 * max(0, 1 - (reading.sinceBeat ?? .infinity) / 0.15))
                 .ignoresSafeArea()
             VStack(spacing: 36) {
                 Caption(text: reading.status)
                 ZStack {
                     Circle()
-                        .stroke(.white.opacity(0.08), lineWidth: 6)
+                        .stroke(.primary.opacity(0.08), lineWidth: 1.5)
                     Circle()
                         .trim(from: 0, to: reading.ring)
-                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .stroke(.primary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     BPMLabel(bpm: reading.bpm, error: reading.error, fresh: reading.fresh)
                 }
                 .frame(width: 300, height: 300)
                 Circle()
-                    .fill(Color.accentColor)
-                    .frame(width: 18, height: 18)
+                    .fill(.primary)
+                    .frame(width: 10, height: 10)
                     .opacity(reading.phase.map { exp(-5 * $0) } ?? 0)
                 OtherCaption(other: reading.other)
             }
@@ -204,9 +204,9 @@ private struct Caption: View {
 
     var body: some View {
         Text(text)
-            .font(.system(.footnote, design: .rounded).weight(.semibold))
-            .tracking(2)
-            .foregroundStyle(.white.opacity(0.5))
+            .font(.system(size: 11, weight: .medium))
+            .tracking(0.66)
+            .foregroundStyle(.primary.opacity(0.4))
     }
 }
 
@@ -231,15 +231,16 @@ private struct BPMLabel: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(bpm.map { "\(Int($0.rounded()))" } ?? "–")
-                .font(.system(size: 120, weight: .semibold, design: .rounded))
+                .font(.system(size: 128, weight: .medium))
+                .tracking(-6.4)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .foregroundStyle(.white.opacity(bpm == nil ? 0.25 : fresh ? 1 : 0.45))
+                .foregroundStyle(.primary.opacity(bpm == nil ? 0.25 : fresh ? 1 : 0.45))
             Text(detail)
-                .font(.system(.title3, design: .rounded).weight(.medium))
+                .font(.system(size: 13, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.56))
         }
         .padding(.horizontal, 24)
     }
@@ -252,8 +253,10 @@ private struct BPMLabel: View {
     }
 }
 
+/// A pill button: black for the primary action, translucent gray otherwise.
 private struct ControlButton: View {
     let title: String
+    var primary = false
     let action: () -> Void
 
     @Environment(\.isEnabled) private var isEnabled
@@ -261,13 +264,14 @@ private struct ControlButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(.headline, design: .rounded))
+                .font(.system(size: 15, weight: .medium))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(.white.opacity(0.08), in: Capsule())
+                .padding(.vertical, 14)
+                .foregroundStyle(primary ? Color(.paper) : .primary)
+                .background(primary ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(white: 0.76, opacity: 0.24)), in: Capsule())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white.opacity(isEnabled ? 0.85 : 0.3))
+        .opacity(isEnabled ? 1 : 0.35)
     }
 }
 

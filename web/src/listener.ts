@@ -94,6 +94,8 @@ export class BeatListener {
   quiet = false;
   /** Called whenever anything shown changes. */
   onChange = () => {};
+  /** Milliseconds the latest window took to analyse, for `?debug`. */
+  inferenceTime = 0;
 
   private estimate?: Estimate;
   /** Factor from ½× and 2×, to fix half- or double-time detection. */
@@ -229,7 +231,9 @@ export class BeatListener {
         continue;
       }
       const { samples, filled, end } = this.window.snapshot();
+      const started = performance.now();
       const logits = await inference.run(samples).catch(() => []);
+      this.inferenceTime = performance.now() - started;
       if (session === this.session) this.update(estimateFromLogits(logits, filled, end), end);
     }
   }

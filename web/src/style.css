@@ -1,7 +1,22 @@
+/* Only the Latin subset, since the app shows nothing else. */
+@font-face {
+  font-family: "Inter Tight Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2") format("woff2-variations");
+}
+
 :root {
-  --ink: #0a0a0c;
-  --accent: #ff6b3d;
-  color-scheme: dark;
+  --background: #f5f5f5;
+  --ink: #000;
+  --muted: rgb(0 0 0 / 40%);
+  --soft: rgb(0 0 0 / 56%);
+  --pill: rgb(194 194 194 / 24%);
+  --line: rgb(0 0 0 / 8%);
+  --sans: "Inter Tight Variable", -apple-system, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
 }
 
 * {
@@ -12,11 +27,13 @@
 html,
 body {
   height: 100%;
-  background: var(--ink);
-  color: #fff;
-  font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  background: var(--background);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 500;
   overflow: hidden;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -30,7 +47,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 36px;
+  gap: 32px;
   padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
   touch-action: none;
 }
@@ -38,17 +55,17 @@ body {
 #flash {
   position: absolute;
   inset: 0;
-  background: var(--accent);
+  background: var(--ink);
   opacity: 0;
   pointer-events: none;
 }
 
 .caption {
   position: relative;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  color: rgb(255 255 255 / 50%);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
   text-align: center;
   min-height: 1.2em;
 }
@@ -61,6 +78,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 }
 
 #dial svg {
@@ -71,39 +89,39 @@ body {
 
 #dial circle {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 1.5;
 }
 
 .track {
-  stroke: rgb(255 255 255 / 8%);
+  stroke: var(--line);
 }
 
 #ring {
-  stroke: var(--accent);
+  stroke: var(--ink);
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
 }
 
 #bpm {
-  font-size: min(120px, 30vw);
-  font-weight: 600;
+  font-size: min(128px, 32vw);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
 }
 
 #detail {
-  font-size: 20px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: rgb(255 255 255 / 50%);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--soft);
 }
 
 #dot {
-  width: 18px;
-  height: 18px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ink);
   opacity: 0;
 }
 
@@ -111,23 +129,27 @@ body {
   position: absolute;
   left: 20px;
   right: 20px;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom: calc(16px + env(safe-area-inset-bottom));
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 #controls button {
   flex: 1;
-  padding: 16px 0;
+  padding: 14px 0;
   border: none;
   border-radius: 999px;
-  background: rgb(255 255 255 / 8%);
-  color: rgb(255 255 255 / 85%);
+  background: var(--pill);
+  color: var(--ink);
   font: inherit;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 15px;
+}
+
+#controls #reset {
+  background: var(--ink);
+  color: var(--background);
 }
 
 #controls button:disabled {
-  color: rgb(255 255 255 / 30%);
+  opacity: 0.35;
 }
