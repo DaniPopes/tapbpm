@@ -163,5 +163,14 @@ void listener.start();
 wake();
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  void navigator.serviceWorker.register("sw.js");
+  // A new build takes over as soon as it installs; reload once so the page runs it too.
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
+  }
+  void navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).then((registration) => {
+    // Installed apps resume rather than relaunch, so check for a new build on every return.
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) void registration.update();
+    });
+  });
 }

@@ -1,6 +1,6 @@
-// Serves the app from the cache, so it starts instantly and works offline. Assets and the model
-// have content-hashed names; the page itself is refreshed in the background for the next launch.
-const CACHE = "tapbpm-v1";
+// Caches the app for offline use and instant starts. Each build registers this worker with its
+// own version, so a deploy installs a new worker with a fresh cache and drops the old one.
+const CACHE = `tapbpm-${new URL(location.href).searchParams.get("v")}`;
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -19,15 +19,20 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
-      const cached = await cache.match(request);
-      if (cached && request.mode !== "navigate") return cached;
-      const fetched = fetch(request).then((response) => {
+      // Pages come from the network so updates show at once; assets have content-hashed names.
+      if (request.mode !== "navigate") {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+      }
+      try {
+        const response = await fetch(request);
         if (response.ok) event.waitUntil(cache.put(request, response.clone()));
         return response;
-      });
-      if (!cached) return fetched;
-      event.waitUntil(fetched.catch(() => {}));
-      return cached;
+      } catch (error) {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        throw error;
+      }
     })(),
   );
 });
