@@ -176,14 +176,14 @@ document.addEventListener("visibilitychange", () => {
 wake();
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  // A new build takes over as soon as it installs; reload once so the page runs it too.
-  if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
-  }
-  void navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).then((registration) => {
-    // Installed apps resume rather than relaunch, so check for a new build on every return.
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) void registration.update();
-    });
+  void navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`);
+  // Installed apps resume rather than relaunch, so on every return reload if the page now loads
+  // a different script, which means a new build was deployed.
+  const running = document.querySelector<HTMLScriptElement>("script[type=module][src]")?.src;
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) return;
+    const page = await fetch(location.href, { cache: "no-store" }).then((r) => r.text(), () => "");
+    const script = page.match(/<script[^>]+src="([^"]+)"/)?.[1];
+    if (script && running && new URL(script, location.href).href !== running) location.reload();
   });
 }
